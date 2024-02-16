@@ -194,6 +194,7 @@ except FileNotFoundError:
 
 try:
     tipo = inscricao = None
+    print('>>>>>>>>>>>PARCELAS>>>>>>>>>>')
 
     for cadastro in df_parcelas['IdCadastro']:
         tipo, inscricao = cadastro[:-11].replace('0', ''), cadastro[-11:]
@@ -228,6 +229,7 @@ try:
         df_memo_im.to_csv(in_file_memo_im, index=False)
         df_memo_mo.to_csv(in_file_memo_mo, index=False)
 
+    print('>>>>>>>>>>>ESTOQUE>>>>>>>>>>')
 
     for cadastro in df_estoque['IdCadastro']:
         tipo, inscricao = cadastro[:-11].replace('0', ''), cadastro[-11:]
