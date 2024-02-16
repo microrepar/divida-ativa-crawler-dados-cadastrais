@@ -1,0 +1,6 @@
+.env
+tasks/
+data/
+resources/
+__pycache__/
+*.pyc
