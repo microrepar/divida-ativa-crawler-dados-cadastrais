@@ -10,20 +10,21 @@ from divida_ativa_page import get_divida_ativa_driver, get_element_by_xpath
 # ### File Locations
 in_file_estoque = Path.cwd() / "data" / "raw" / "2024-01-11 Lista estoque dívida acima de 50000.xlsx"
 in_file_parcelas = Path.cwd() / "data" / "raw" / "2024-01-11 Lista de parcelas acima de 500 a partir de 01-11-2023.xlsx"
-in_file_memo_im = Path.cwd() / "data" / "raw" / "memo_imobiliario.csv"
-in_file_memo_mo = Path.cwd() / "data" / "raw" / "memo_mobiliario.csv"
+
+in_file_log = Path.cwd() / "data" / "raw" / "log.csv"
+
 summary_file_imobiliario = Path.cwd() / "data" / "processed" / f"dados_cadastrais_imobiliario.csv"
 summary_file_mobiliario = Path.cwd() / "data" / "processed" / f"dados_cadastrais_mobiliario.csv"
 
 dtypes={
-    'IdCadastro': 'string'
+    'IdCadastro': 'string',
+    'inscricao': 'string',
 }
 
 df_estoque = pd.read_excel(in_file_estoque, dtype=dtypes)
 df_parcelas = pd.read_excel(in_file_parcelas, dtype=dtypes)
 
-df_memo_im = pd.read_csv(in_file_memo_im)
-df_memo_mo = pd.read_csv(in_file_memo_mo)
+df_memo = pd.read_csv(in_file_log, dtype=dtypes)
 
 driver = get_divida_ativa_driver()
 
@@ -194,76 +195,66 @@ except FileNotFoundError:
 
 try:
     tipo = inscricao = None
-    print('>>>>>>>>>>>PARCELAS>>>>>>>>>>')
+    inscricoes_prontas = df_memo['inscricao'].tolist()
+    contador = 0
 
-    for cadastro in df_parcelas['IdCadastro']:
-        tipo, inscricao = cadastro[:-11].replace('0', ''), cadastro[-11:]
+    for name, df in [('ESTOQUE', df_estoque), ('PARCELAS', df_parcelas)]:
+        contador += 1
+        if contador % 100 == 0: print(f'>>>>>>>qtde. inscrições>>>>>>> {contador:0>4}')
 
-        if tipo == '1':
-            if df_memo_im['inscricao'].isin([inscricao]).any(): continue
-            
-            dados_cadastrais = get_dados_cadastrais_imobiliario(driver, tipo, inscricao)
-            if dados_cadastrais is None:
-                df_memo_im.loc[len(df_memo_im)] = [tipo, inscricao, 'error']
-                continue
-            df_imobiliario.loc[len(df_imobiliario)] = dados_cadastrais
-
-            df_memo_im.loc[len(df_memo_im)] = [tipo, inscricao, 'ok']
-
-        if tipo == '2':
-            inscricao = inscricao[-5:]
-
-            if df_memo_mo['inscricao'].isin([inscricao]).any(): continue
-            
-            dados_cadastrais_list = get_dados_cadastrais_mobiliario(driver, tipo, inscricao)
-            if dados_cadastrais_list is None:
-                df_memo_mo.loc[len(df_memo_mo)] = [tipo, inscricao, 'error']
-                continue
-            
-            for dados_cadastrais in dados_cadastrais_list:
-                df_mobiliario.loc[len(df_mobiliario)] = dados_cadastrais
-            df_memo_mo.loc[len(df_memo_mo)] = [tipo, inscricao, 'ok']
+        lista_cadastros = df['IdCadastro'].unique()
+        print(f'>>>>>>>>>>>{name}>>>>>>>>>>', len(lista_cadastros))
         
-        df_imobiliario.to_csv(summary_file_imobiliario, index=False)
-        df_mobiliario.to_csv(summary_file_mobiliario, index=False)
-        df_memo_im.to_csv(in_file_memo_im, index=False)
-        df_memo_mo.to_csv(in_file_memo_mo, index=False)
+        for cadastro in lista_cadastros:
+            tipo, inscricao = str(cadastro[:-11].replace('0', '')), str(cadastro[-11:])
 
-    print('>>>>>>>>>>>ESTOQUE>>>>>>>>>>')
-
-    for cadastro in df_estoque['IdCadastro']:
-        tipo, inscricao = cadastro[:-11].replace('0', ''), cadastro[-11:]
-
-        if tipo == '1':
-            if df_memo_im['inscricao'].isin([inscricao]).any(): continue
-            
-            dados_cadastrais = get_dados_cadastrais_imobiliario(driver, tipo, inscricao)
-            if dados_cadastrais is None:
-                df_memo_im.loc[len(df_memo_im)] = [tipo, inscricao, 'error']
+            # se ja existe a incricao do tipo imobiliario no arquivo de log
+            # vai para o proximo da lista
+            if inscricao in inscricoes_prontas: 
+                # print('>>>>>>>NEXT>>>>>>', inscricao, ' - ', tipo)
                 continue
-            df_imobiliario.loc[len(df_imobiliario)] = dados_cadastrais
 
-            df_memo_im.loc[len(df_memo_im)] = [tipo, inscricao, 'ok']
+            if tipo == '1':
+                dados_cadastrais = get_dados_cadastrais_imobiliario(driver, tipo, inscricao)
+                
+                if dados_cadastrais is None:
+                    # se houve algum problema na extracao adiciona a inscricao                 
+                    # com o status de "error" no log do tipo=1 imobiliario
+                    df_memo.loc[len(df_memo)] = [tipo, inscricao, 'error']
+                    continue
+                else:                    
+                    df_imobiliario.loc[len(df_imobiliario)] = dados_cadastrais
 
-        if tipo == '2':
-            inscricao = inscricao[-5:]
+            if tipo == '2':
+                inscricao_tipo2 = str(int(inscricao))
+                
+                dados_cadastrais_list = get_dados_cadastrais_mobiliario(driver, tipo, inscricao_tipo2)
 
-            if df_memo_mo['inscricao'].isin([inscricao]).any(): continue
+                if dados_cadastrais_list is None:
+                    # se houve algum problema na extracao adiciona a inscricao 
+                    # com o status de "error" no log do tipo=2 mobiliario
+                    df_memo.loc[len(df_memo)] = [tipo, inscricao, 'error']
+                    continue
+                else:                
+                    for dados_cadastrais in dados_cadastrais_list:
+                        df_mobiliario.loc[len(df_mobiliario)] = dados_cadastrais
+                    
+            # adiciona no log a inscricao completou a extracao dos dados cadastrais
+            df_memo.loc[len(df_memo)] = [tipo, inscricao, 'ok']
             
-            dados_cadastrais_list = get_dados_cadastrais_mobiliario(driver, tipo, inscricao)
-            if dados_cadastrais_list is None:
-                df_memo_mo.loc[len(df_memo_mo)] = [tipo, inscricao, 'error']
-                continue
-            
-            for dados_cadastrais in dados_cadastrais_list:
-                df_mobiliario.loc[len(df_mobiliario)] = dados_cadastrais
-            df_memo_mo.loc[len(df_memo_mo)] = [tipo, inscricao, 'ok']
-        
-        df_imobiliario.to_csv(summary_file_imobiliario, index=False)
-        df_mobiliario.to_csv(summary_file_mobiliario, index=False)
-        df_memo_im.to_csv(in_file_memo_im, index=False)
-        df_memo_mo.to_csv(in_file_memo_mo, index=False)
-
 except Exception as error:
     print('>>>>>ERROR>>>>>', tipo, ' | ', inscricao)
+
+    df_imobiliario.to_csv(summary_file_imobiliario, index=False)
+    df_mobiliario.to_csv(summary_file_mobiliario, index=False)
+    df_memo.to_csv(in_file_log, index=False)
+    
     raise error
+
+
+
+df_imobiliario.to_csv(summary_file_imobiliario, index=False)
+df_mobiliario.to_csv(summary_file_mobiliario, index=False)
+df_memo.to_csv(in_file_log, index=False)
+
+print('***EXTRAÇÃO REALIZADA COM SUCESSO***')

@@ -14,23 +14,15 @@ HERE = Path(__name__).parent
 (HERE / 'data' / 'processed').mkdir(parents=True, exist_ok=True)
 (HERE / 'data' / 'raw').mkdir(parents=True, exist_ok=True)
 
-
 # Defina o caminho para o arquivo CSV
-caminho_arquivo1 = HERE / 'data' / 'raw' / "memo_imobiliario.csv"
-caminho_arquivo2 = HERE / 'data' / 'raw' / "memo_mobiliario.csv"
+caminho_arquivo = HERE / 'data' / 'raw' / "log.csv"
 
 # Defina os dados que serão escritos na coluna
 dados_coluna = ["tipo", "inscricao", "status"]  # Substitua pelos seus próprios dados
 
-if not caminho_arquivo1.exists():
+if not caminho_arquivo.exists():
     # Escreva os dados no arquivo CSV
-    with open(caminho_arquivo1, "w", newline="") as arquivo_csv:
-        escritor_csv = csv.writer(arquivo_csv)
-        escritor_csv.writerow(dados_coluna)
-
-if not caminho_arquivo2.exists():
-    # Escreva os dados no arquivo CSV
-    with open(caminho_arquivo2, "w", newline="") as arquivo_csv:
+    with open(caminho_arquivo, "w", newline="") as arquivo_csv:
         escritor_csv = csv.writer(arquivo_csv)
         escritor_csv.writerow(dados_coluna)
 
