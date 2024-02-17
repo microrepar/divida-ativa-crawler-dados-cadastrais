@@ -18,7 +18,7 @@ HERE = Path(__name__).parent
 caminho_arquivo = HERE / 'data' / 'raw' / "log.csv"
 
 # Defina os dados que serão escritos na coluna
-dados_coluna = ["tipo", "inscricao", "status"]  # Substitua pelos seus próprios dados
+dados_coluna = ["IdCadastro", "tipo", "inscricao", "status"]
 
 if not caminho_arquivo.exists():
     # Escreva os dados no arquivo CSV

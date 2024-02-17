@@ -1,3 +1,4 @@
+import datetime
 import time
 from pathlib import Path
 from config import Config
@@ -18,7 +19,7 @@ summary_file_mobiliario = Path.cwd() / "data" / "processed" / f"dados_cadastrais
 
 dtypes={
     'IdCadastro': 'string',
-    'inscricao': 'string',
+    'inscricao': 'string',    
 }
 
 df_estoque = pd.read_excel(in_file_estoque, dtype=dtypes)
@@ -29,7 +30,7 @@ df_memo = pd.read_csv(in_file_log, dtype=dtypes)
 driver = get_divida_ativa_driver()
 
 
-def get_dados_cadastrais_imobiliario(driver, tipo, inscricao):
+def get_dados_cadastrais_imobiliario(driver, tipo, inscricao, cadastro):
     url_imobiliario = (Config.URL_IMOB)
     
     for _ in range(2):
@@ -93,11 +94,11 @@ def get_dados_cadastrais_imobiliario(driver, tipo, inscricao):
         if i == 4:
             dado_endereco_correio += f' - {row.text}'
 
-    return (inscricao, tipo, dado_inscricao, dado_responsavel, dado_endereco_completo, 
+    return (cadastro, inscricao, tipo, dado_inscricao, dado_responsavel, dado_endereco_completo, 
             dado_cpf_cnpj, dado_local_imovel, dado_endereco_correio)
 
 
-def get_dados_cadastrais_mobiliario(driver, tipo, inscricao):
+def get_dados_cadastrais_mobiliario(driver, tipo, inscricao, cadastro):
     url_mobiliario = (Config.URL_MOB)
     
     for _ in range(2):
@@ -166,6 +167,7 @@ def get_dados_cadastrais_mobiliario(driver, tipo, inscricao):
     list_dados = []
     for socio in socio_list:
         dados = [
+            cadastro,
             inscricao,
             tipo,
             dado_inscricao,
@@ -186,41 +188,44 @@ try:
     df_imobiliario = pd.read_csv(summary_file_imobiliario)
     df_mobiliario = pd.read_csv(summary_file_mobiliario)
 except FileNotFoundError:
-    df_imobiliario = pd.DataFrame(columns=['inscr', 'tipo', 'inscricao', 'responsavel', 'endereco_completo', 
+    df_imobiliario = pd.DataFrame(columns=['IdCadastro', 'inscr', 'tipo', 'inscricao', 'responsavel', 'endereco_completo', 
                                         'documento', 'local_imovel', 'endereco_correio'])
 
-    df_mobiliario = pd.DataFrame(columns=['inscr', 'tipo', 'inscricao', 'razao_social', 'endereco', 'documento', 
+    df_mobiliario = pd.DataFrame(columns=['IdCadastro', 'inscr', 'tipo', 'inscricao', 'razao_social', 'endereco', 'documento', 
                                         'nome_fantasia', 'estabelecimento', 'tipo_tributo', 
                                         'nome_socio', 'cpf_socio', 'rg_socio', 'data_socio'])
 
 try:
     tipo = inscricao = None
-    inscricoes_prontas = df_memo['inscricao'].tolist()
-    contador = 0
 
-    for name, df in [('ESTOQUE', df_estoque), ('PARCELAS', df_parcelas)]:
-        contador += 1
-        if contador % 100 == 0: print(f'>>>>>>>qtde. inscrições>>>>>>> {contador:0>4}')
+    for name, df in [('ESTOQUE', df_estoque), ('PARCELAS', df_parcelas)]:        
 
         lista_cadastros = df['IdCadastro'].unique()
-        print(f'>>>>>>>>>>>{name}>>>>>>>>>>', len(lista_cadastros))
+        print(f'>>>>>>>>>>>>>>>>>>> {name} >>>>>>>>>>>>>>>>>>>', len(lista_cadastros))
         
+        contador = 0
+
         for cadastro in lista_cadastros:
+            contador += 1
+            if contador % 100 == 0:
+                agora = datetime.datetime.now()
+                print(f'>>>>qtde. inscrições>>>> {contador:0>4}', agora.strftime('%H:%M:%S:%f'))
+
+            cadastro = f'{cadastro:0>15}'
             tipo, inscricao = str(cadastro[:-11].replace('0', '')), str(cadastro[-11:])
 
             # se ja existe a incricao do tipo imobiliario no arquivo de log
             # vai para o proximo da lista
-            if inscricao in inscricoes_prontas: 
-                # print('>>>>>>>NEXT>>>>>>', inscricao, ' - ', tipo)
+            if df_memo['inscricao'].isin([inscricao]).any(): 
                 continue
 
             if tipo == '1':
-                dados_cadastrais = get_dados_cadastrais_imobiliario(driver, tipo, inscricao)
+                dados_cadastrais = get_dados_cadastrais_imobiliario(driver, tipo, inscricao, cadastro)
                 
                 if dados_cadastrais is None:
                     # se houve algum problema na extracao adiciona a inscricao                 
                     # com o status de "error" no log do tipo=1 imobiliario
-                    df_memo.loc[len(df_memo)] = [tipo, inscricao, 'error']
+                    df_memo.loc[len(df_memo)] = [cadastro, tipo, inscricao, 'error']
                     continue
                 else:                    
                     df_imobiliario.loc[len(df_imobiliario)] = dados_cadastrais
@@ -228,19 +233,21 @@ try:
             if tipo == '2':
                 inscricao_tipo2 = str(int(inscricao))
                 
-                dados_cadastrais_list = get_dados_cadastrais_mobiliario(driver, tipo, inscricao_tipo2)
+                dados_cadastrais_list = get_dados_cadastrais_mobiliario(driver, tipo, inscricao_tipo2, cadastro)
 
                 if dados_cadastrais_list is None:
                     # se houve algum problema na extracao adiciona a inscricao 
                     # com o status de "error" no log do tipo=2 mobiliario
-                    df_memo.loc[len(df_memo)] = [tipo, inscricao, 'error']
+                    df_memo.loc[len(df_memo)] = [cadastro, tipo, inscricao, 'error']
                     continue
                 else:                
                     for dados_cadastrais in dados_cadastrais_list:
                         df_mobiliario.loc[len(df_mobiliario)] = dados_cadastrais
                     
             # adiciona no log a inscricao completou a extracao dos dados cadastrais
-            df_memo.loc[len(df_memo)] = [tipo, inscricao, 'ok']
+            df_memo.loc[len(df_memo)] = [cadastro, tipo, inscricao, 'ok']
+        
+        print(f'>>>>qtde. inscrições>>>> {contador:0>4}', agora.strftime('%H:%M:%S:%f'))
             
 except Exception as error:
     print('>>>>>ERROR>>>>>', tipo, ' | ', inscricao)
@@ -250,8 +257,6 @@ except Exception as error:
     df_memo.to_csv(in_file_log, index=False)
     
     raise error
-
-
 
 df_imobiliario.to_csv(summary_file_imobiliario, index=False)
 df_mobiliario.to_csv(summary_file_mobiliario, index=False)
